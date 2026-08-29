@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Espace DC - Rapports & Objectifs</title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 20px; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #dc2626; padding-bottom: 15px; }
+    .header h2 { color: #dc2626; margin: 0; }
+    .card { background-color: #ffffff; padding: 20px; border-radius: 8px; margin-top: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+    .btn-logout { background-color: #dc2626; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-download { background-color: #16a34a; color: white; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-download:hover { background-color: #15803d; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+    th { background-color: #f1f5f9; color: #475569; }
+    .form-inline { display: flex; gap: 10px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+    .form-inline input, .form-inline select { padding: 8px; border-radius: 4px; border: 1px solid #cbd5e1; background: #ffffff; color: #0f172a; }
+    .btn-add { background-color: #dc2626; color: white; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <h2 id="dc-title">Espace Directeur de Centre (DC)</h2>
+      <small id="dc-zone" style="color: #64748b; font-weight: bold;"></small>
+    </div>
+    <button class="btn-logout" onclick="deconnexion()">Déconnexion</button>
+  </div>
+
+  <div class="card">
+    <h3 style="color: #dc2626; margin-top: 0;">Assigner des Objectifs Quotidiens (SD)</h3>
+    <form id="form-objectif" class="form-inline">
+      <select id="select-sd" required></select>
+      <input type="number" id="target-gsm" placeholder="Obj. GSM AM" required>
+      <input type="number" id="target-gross-adds" placeholder="Obj. Gross Adds" required>
+      <input type="number" id="target-sso" placeholder="Obj. SSO" required>
+      <input type="number" id="target-smartphone" placeholder="Obj. Smart Phone" required>
+      <button type="submit" class="btn-add">Transmettre</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3 style="color: #dc2626; margin-top: 0;">Rapports Reçus (Aujourd'hui)</h3>
+
+    <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center;">
+      <input type="text" id="search-input" placeholder="Rechercher par Agent, Site, Numéro..." onkeyup="filtrerRapportsDC()" style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #cbd5e1;">
+      <button class="btn-download" onclick="telechargerRapportCSV()">Exporter en CSV (Excel)</button>
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Agent SD</th>
+            <th>Zone</th>
+            <th>ID Site</th>
+            <th>N° Réveillé</th>
+            <th>N° My Airtel</th>
+            <th>N° Starlink</th>
+            <th>GSM AM</th>
+            <th>Gross Adds</th>
+            <th>SSO</th>
+            <th>Smart Phone</th>
+          </tr>
+        </thead>
+        <tbody id="table-rapports-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const session = JSON.parse(localStorage.getItem('compte_connecte'));
+    if (!session || session.role !== "DC") {
+      window.location.href = "login.html";
+    } else {
+      document.getElementById('dc-title').innerText = "Espace DC : " + session.nom;
+      document.getElementById('dc-zone').innerText = "Zone / Territoire : " + (session.zone || "Non spécifiée");
+      chargerAgents();
+      chargerRapports();
+    }
+
+    function getAujourdhui() {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    function chargerAgents() {
+      const sds = JSON.parse(localStorage.getItem('comptes_sd_zbm')) || [];
+      const select = document.getElementById('select-sd');
+      select.innerHTML = '<option value="">Sélectionner un SD de votre zone...</option>';
+      const agentsMaZone = sds.filter(sd => sd.statut === "ACTIF" && sd.zone === session.zone);
+
+      agentsMaZone.forEach(sd => {
+        select.innerHTML += `<option value="${sd.code}">${sd.nom} (${sd.code})</option>`;
+      });
+    }
+
+    document.getElementById('form-objectif').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const objectifs = JSON.parse(localStorage.getItem('objectifs_sd_zbm')) || [];
+      const dateActuelle = new Date();
+
+      objectifs.push({
+        sdCode: document.getElementById('select-sd').value,
+        dcCode: session.code,
+        cibleGsm: document.getElementById('target-gsm').value,
+        cibleGrossAdds: document.getElementById('target-gross-adds').value,
+        cibleSso: document.getElementById('target-sso').value,
+        cibleSmartPhone: document.getElementById('target-smartphone').value,
+        date: dateActuelle.toLocaleDateString('fr-FR'),
+        dateIso: getAujourdhui()
+      });
+
+      localStorage.setItem('objectifs_sd_zbm', JSON.stringify(objectifs));
+      alert("Objectifs transmis avec succès !");
+      this.reset();
+    });
+
+    function chargerRapports() {
+      const rapports = JSON.parse(localStorage.getItem('rapports_sd_zbm')) || [];
+      const aujourdhui = getAujourdhui();
+      
+      // Filtre uniquement pour la zone du DC et pour la journée en cours
+      window.rapportsFiltrésZone = rapports.filter(r => r.zone === session.zone && r.dateIso === aujourdhui);
+      afficherTableauDC(window.rapportsFiltrésZone);
+    }
+
+    function afficherTableauDC(liste) {
+      const tbody = document.getElementById('table-rapports-body');
+      tbody.innerHTML = "";
+
+      if (liste.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#94a3b8;">Aucun rapport reçu aujourd\'hui.</td></tr>';
+        return;
+      }
+
+      liste.forEach(r => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${r.date}</td>
+            <td><strong>${r.sdNom}</strong></td>
+            <td>${r.zone || '—'}</td>
+            <td>${r.idSite}</td>
+            <td>${r.numReveille}</td>
+            <td>${r.numMyAirtel}</td>
+            <td>${r.numStarlink}</td>
+            <td><strong>${r.gsmConvertis || 0}</strong></td>
+            <td><strong>${r.grossAdds || 0}</strong></td>
+            <td><strong>${r.sso || 0}</strong></td>
+            <td><strong>${r.smartPhoneGrossAdds || 0}</strong></td>
+          </tr>
+        `;
+      });
+    }
+
+    function filtrerRapportsDC() {
+      const query = document.getElementById('search-input').value.toLowerCase();
+      const resultats = (window.rapportsFiltrésZone || []).filter(r => 
+        (r.sdNom && r.sdNom.toLowerCase().includes(query)) ||
+        (r.idSite && r.idSite.toLowerCase().includes(query)) ||
+        (r.numReveille && r.numReveille.includes(query))
+      );
+      afficherTableauDC(resultats);
+    }
+
+    function telechargerRapportCSV() {
+      const rapports = JSON.parse(localStorage.getItem('rapports_sd_zbm')) || [];
+      const rapportsMaZone = rapports.filter(r => r.zone === session.zone);
+
+      if (rapportsMaZone.length === 0) {
+        alert("Aucune donnée à exporter.");
+        return;
+      }
+
+      let csvContent = "\uFEFF";
+      csvContent += "Date;Agent SD;Zone;ID Site;Numero Reveille;Numero My Airtel;Numero Starlink;GSM Convertis AM;Gross Adds;SSO;Smart Phone Gross Adds\n";
+
+      rapportsMaZone.forEach(r => {
+        csvContent += `"${r.date}";"${r.sdNom}";"${r.zone || ''}";"${r.idSite}";"${r.numReveille}";"${r.numMyAirtel}";"${r.numStarlink}";"${r.gsmConvertis || 0}";"${r.grossAdds || 0}";"${r.sso || 0}";"${r.smartPhoneGrossAdds || 0}"\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `Rapport_DC_${session.zone}_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function deconnexion() {
+      localStorage.removeItem('compte_connecte');
+      window.location.href = "login.html";
+    }
+  </script>
+</body>
+</html>

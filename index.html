@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tableau de bord Admin - ZBM</title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 20px; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #dc2626; padding-bottom: 15px; }
+    .header h1 { color: #dc2626; margin: 0; }
+    .btn-logout { background-color: #dc2626; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-logout:hover { background-color: #b91c1c; }
+    .card { background-color: #ffffff; padding: 20px; border-radius: 8px; margin-top: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+    th { background-color: #f1f5f9; color: #475569; }
+    .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+    .badge-pending { background-color: #fef3c7; color: #92400e; }
+    .badge-active { background-color: #dcfce7; color: #166534; }
+    
+    /* Style des boutons d'action */
+    .btn-action { border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; margin-right: 4px; }
+    .btn-valider { background-color: #16a34a; color: white; }
+    .btn-valider:hover { background-color: #15803d; }
+    .btn-rejeter { background-color: #d97706; color: white; }
+    .btn-rejeter:hover { background-color: #b45309; }
+    .btn-supprimer { background-color: #dc2626; color: white; }
+    .btn-supprimer:hover { background-color: #b91c1c; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>Espace Administration ZBM</h1>
+    <button class="btn-logout" onclick="deconnexion()">Déconnexion</button>
+  </div>
+
+  <div class="card">
+    <h2 id="welcome-msg" style="margin-top:0;">Bienvenue, Super Admin</h2>
+    <p style="color: #64748b;">Gestion des demandes d'accès, validation, rejet et suppression des comptes.</p>
+  </div>
+
+  <div class="card">
+    <h3 style="color: #dc2626; margin-top:0;">Demandes d'accès & Comptes Utilisateurs</h3>
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Nom</th>
+            <th>Email</th>
+            <th>Zone / Territoire</th>
+            <th>Rôle</th>
+            <th>Statut</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="user-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const session = JSON.parse(localStorage.getItem('compte_connecte'));
+    if (!session || session.role !== "ADMIN") {
+      alert("Accès non autorisé.");
+      window.location.href = "login.html";
+    } else {
+      document.getElementById('welcome-msg').innerText = "Bienvenue, " + session.nom;
+      chargerUtilisateurs();
+    }
+
+    function chargerUtilisateurs() {
+      const tbody = document.getElementById('user-table-body');
+      tbody.innerHTML = "";
+
+      const zbms = JSON.parse(localStorage.getItem('comptes_zbm_zbm')) || [];
+      const dcs = JSON.parse(localStorage.getItem('comptes_dc_zbm')) || [];
+      const sds = JSON.parse(localStorage.getItem('comptes_sd_zbm')) || [];
+
+      const tousLesComptes = [
+        ...zbms.map(z => ({ ...z, roleLabel: "Directeur ZBM", keyType: "ZBM" })),
+        ...dcs.map(d => ({ ...d, roleLabel: "Directeur (DC)", keyType: "DC" })),
+        ...sds.map(s => ({ ...s, roleLabel: "Agent (SD)", keyType: "SD" }))
+      ];
+
+      if (tousLesComptes.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#94a3b8;">Aucun compte enregistré.</td></tr>`;
+        return;
+      }
+
+      tousLesComptes.forEach(user => {
+        const tr = document.createElement('tr');
+        const isActif = user.statut === "ACTIF";
+        
+        tr.innerHTML = `
+          <td><strong>${user.code}</strong></td>
+          <td>${user.nom}</td>
+          <td>${user.email}</td>
+          <td><strong>${user.zone || '—'}</strong></td>
+          <td>${user.roleLabel}</td>
+          <td>
+            <span class="badge ${isActif ? 'badge-active' : 'badge-pending'}">
+              ${isActif ? 'ACTIF' : 'EN ATTENTE'}
+            </span>
+          </td>
+          <td>
+            ${!isActif ? `
+              <button class="btn-action btn-valider" onclick="validerCompte('${user.code}', '${user.keyType}')">Valider</button>
+              <button class="btn-action btn-rejeter" onclick="supprimerCompte('${user.code}', '${user.keyType}', 'refuser')">Rejeter</button>
+            ` : ''}
+            <button class="btn-action btn-supprimer" onclick="supprimerCompte('${user.code}', '${user.keyType}', 'supprimer')">Supprimer</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Valider un compte en attente
+    function validerCompte(code, keyType) {
+      const storageKey = getKey(keyType);
+      let comptes = JSON.parse(localStorage.getItem(storageKey)) || [];
+      comptes = comptes.map(c => c.code === code ? { ...c, statut: "ACTIF" } : c);
+      localStorage.setItem(storageKey, JSON.stringify(comptes));
+      chargerUtilisateurs();
+    }
+
+    // Supprimer ou Rejeter un compte
+    function supprimerCompte(code, keyType, actionType) {
+      const message = actionType === 'refuser' 
+        ? "Voulez-vous vraiment rejeter cette demande ?" 
+        : "Voulez-vous vraiment supprimer définitivement ce compte ?";
+
+      if (confirm(message)) {
+        const storageKey = getKey(keyType);
+        let comptes = JSON.parse(localStorage.getItem(storageKey)) || [];
+        comptes = comptes.filter(c => c.code !== code);
+        localStorage.setItem(storageKey, JSON.stringify(comptes));
+        chargerUtilisateurs();
+      }
+    }
+
+    function getKey(keyType) {
+      if (keyType === "ZBM") return 'comptes_zbm_zbm';
+      if (keyType === "DC") return 'comptes_dc_zbm';
+      return 'comptes_sd_zbm';
+    }
+
+    function deconnexion() {
+      localStorage.removeItem('compte_connecte');
+      window.location.href = "login.html";
+    }
+  </script>
+</body>
+</html>

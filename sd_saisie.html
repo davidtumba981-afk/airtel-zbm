@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Espace Agent SD - Saisie & Historique</title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 20px; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #dc2626; padding-bottom: 15px; }
+    .header h2 { color: #dc2626; margin: 0; }
+    .card { background-color: #ffffff; padding: 20px; border-radius: 8px; margin-top: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 12px; margin-bottom: 4px; color: #475569; font-weight: bold; }
+    .form-group input { width: 95%; padding: 9px; border-radius: 4px; border: 1px solid #cbd5e1; background-color: #ffffff; color: #0f172a; }
+    .btn-submit { background-color: #dc2626; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; }
+    .btn-submit:hover { background-color: #b91c1c; }
+    .btn-logout { background-color: #dc2626; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .alert-success { background-color: #dcfce7; color: #166534; padding: 10px; border-radius: 4px; margin-top: 15px; display: none; border: 1px solid #86efac; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+    th { background-color: #f1f5f9; color: #475569; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <h2 id="agent-title">Espace Agent SD</h2>
+      <small id="agent-zone" style="color: #64748b; font-weight: bold;"></small>
+    </div>
+    <button class="btn-logout" onclick="deconnexion()">Déconnexion</button>
+  </div>
+
+  <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div class="card" style="flex: 1; min-width: 320px;">
+      <h3 style="color: #dc2626; margin-top: 0;">Saisie du Rapport Quotidien</h3>
+      <form id="form-sd-rapport">
+        <div class="form-group">
+          <label>ID Site</label>
+          <input type="text" id="id-site" required placeholder="Ex: SITE-001">
+        </div>
+        <div class="form-group">
+          <label>Numéro Réveillé</label>
+          <input type="text" id="num-reveille" required placeholder="08xxxxxxxx">
+        </div>
+        <div class="form-group">
+          <label>Numéro Entré sur My Airtel</label>
+          <input type="text" id="num-myairtel" required placeholder="08xxxxxxxx">
+        </div>
+        <div class="form-group">
+          <label>Numéro Entré sur Starlink</label>
+          <input type="text" id="num-starlink" required placeholder="08xxxxxxxx">
+        </div>
+        <div class="form-group">
+          <label>Nombre de GSM Convertis d'AM</label>
+          <input type="number" id="gsm-convertis-am" required min="0" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Nombre de Gross Adds</label>
+          <input type="number" id="gross-adds" required min="0" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Nombre de SSO</label>
+          <input type="number" id="sso" required min="0" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Nombre de Smart Phone Gross Adds</label>
+          <input type="number" id="smartphone-gross-adds" required min="0" placeholder="0">
+        </div>
+
+        <button type="submit" class="btn-submit">Envoyer le Rapport</button>
+        <div id="msg-success" class="alert-success">Rapport enregistré avec succès !</div>
+      </form>
+    </div>
+
+    <div class="card" style="flex: 1; min-width: 300px;">
+      <h3 style="color: #dc2626; margin-top: 0;">Mes Objectifs du Jour</h3>
+      <div id="box-objectifs" style="background: #f8fafc; padding: 15px; border-radius: 6px; border: 1px solid #e2e8f0;">
+        <p style="color: #64748b;">Aucun objectif assigné pour aujourd'hui.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="color: #dc2626; margin-top: 0;">Recherche & Historique de Mes Rapports</h3>
+
+    <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+      <input type="text" id="search-sd-input" placeholder="Rechercher par ID Site, N° Téléphone..." onkeyup="filtrerMesRapports()" style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #cbd5e1;">
+      <input type="date" id="search-sd-date" onchange="filtrerMesRapports()" style="padding: 8px; border-radius: 4px; border: 1px solid #cbd5e1;">
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>ID Site</th>
+            <th>N° Réveillé</th>
+            <th>N° My Airtel</th>
+            <th>N° Starlink</th>
+            <th>GSM AM</th>
+            <th>Gross Adds</th>
+            <th>SSO</th>
+            <th>Smart Phone</th>
+          </tr>
+        </thead>
+        <tbody id="table-mes-rapports-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const session = JSON.parse(localStorage.getItem('compte_connecte'));
+    if (!session || session.role !== "SD") {
+      window.location.href = "login.html";
+    } else {
+      document.getElementById('agent-title').innerText = "Espace Agent SD : " + session.nom;
+      document.getElementById('agent-zone').innerText = "Zone / Territoire : " + (session.zone || "Non spécifiée");
+      chargerObjectifsDuJour();
+      chargerMesRapports();
+    }
+
+    function getAujourdhui() {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    document.getElementById('form-sd-rapport').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const rapports = JSON.parse(localStorage.getItem('rapports_sd_zbm')) || [];
+      const dateActuelle = new Date();
+      
+      rapports.push({
+        sdCode: session.code,
+        sdNom: session.nom,
+        zone: session.zone || "NON_DEFINIE",
+        idSite: document.getElementById('id-site').value,
+        numReveille: document.getElementById('num-reveille').value,
+        numMyAirtel: document.getElementById('num-myairtel').value,
+        numStarlink: document.getElementById('num-starlink').value,
+        gsmConvertis: parseInt(document.getElementById('gsm-convertis-am').value || 0),
+        grossAdds: parseInt(document.getElementById('gross-adds').value || 0),
+        sso: parseInt(document.getElementById('sso').value || 0),
+        smartPhoneGrossAdds: parseInt(document.getElementById('smartphone-gross-adds').value || 0),
+        date: dateActuelle.toLocaleDateString('fr-FR'),
+        dateIso: getAujourdhui()
+      });
+
+      localStorage.setItem('rapports_sd_zbm', JSON.stringify(rapports));
+      document.getElementById('msg-success').style.display = 'block';
+      this.reset();
+      chargerMesRapports();
+      setTimeout(() => { document.getElementById('msg-success').style.display = 'none'; }, 3000);
+    });
+
+    function chargerObjectifsDuJour() {
+      const objectifs = JSON.parse(localStorage.getItem('objectifs_sd_zbm')) || [];
+      const aujourdhui = getAujourdhui();
+      const objAujourdhui = objectifs.find(o => o.sdCode === session.code && o.dateIso === aujourdhui);
+      const box = document.getElementById('box-objectifs');
+
+      if (objAujourdhui) {
+        box.innerHTML = `
+          <p><strong>Cible GSM Convertis AM :</strong> ${objAujourdhui.cibleGsm || 0}</p>
+          <p><strong>Cible Gross Adds :</strong> ${objAujourdhui.cibleGrossAdds || 0}</p>
+          <p><strong>Cible SSO :</strong> ${objAujourdhui.cibleSso || 0}</p>
+          <p><strong>Cible Smart Phone Gross Adds :</strong> ${objAujourdhui.cibleSmartPhone || 0}</p>
+          <p><small style="color:#64748b;">Assigné le : ${objAujourdhui.date}</small></p>
+        `;
+      }
+    }
+
+    function chargerMesRapports() {
+      const rapports = JSON.parse(localStorage.getItem('rapports_sd_zbm')) || [];
+      window.mesRapports = rapports.filter(r => r.sdCode === session.code);
+      afficherTableauSD(window.mesRapports);
+    }
+
+    function afficherTableauSD(liste) {
+      const tbody = document.getElementById('table-mes-rapports-body');
+      tbody.innerHTML = "";
+
+      if (liste.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#94a3b8;">Aucun rapport trouvé.</td></tr>';
+        return;
+      }
+
+      liste.forEach(r => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${r.date}</td>
+            <td><strong>${r.idSite}</strong></td>
+            <td>${r.numReveille}</td>
+            <td>${r.numMyAirtel}</td>
+            <td>${r.numStarlink}</td>
+            <td><strong>${r.gsmConvertis || 0}</strong></td>
+            <td><strong>${r.grossAdds || 0}</strong></td>
+            <td><strong>${r.sso || 0}</strong></td>
+            <td><strong>${r.smartPhoneGrossAdds || 0}</strong></td>
+          </tr>
+        `;
+      });
+    }
+
+    function filtrerMesRapports() {
+      const queryText = document.getElementById('search-sd-input').value.toLowerCase();
+      const queryDate = document.getElementById('search-sd-date').value;
+
+      const resultats = (window.mesRapports || []).filter(r => {
+        const correspondTexte = (r.idSite && r.idSite.toLowerCase().includes(queryText)) ||
+                                (r.numReveille && r.numReveille.includes(queryText)) ||
+                                (r.numMyAirtel && r.numMyAirtel.includes(queryText));
+
+        const correspondDate = queryDate ? r.dateIso === queryDate : true;
+
+        return correspondTexte && correspondDate;
+      });
+
+      afficherTableauSD(resultats);
+    }
+
+    function deconnexion() {
+      localStorage.removeItem('compte_connecte');
+      window.location.href = "login.html";
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rapport Global - Directeur ZBM</title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 20px; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #dc2626; padding-bottom: 15px; }
+    .header h2 { color: #dc2626; margin: 0; }
+    .metrics { display: flex; gap: 15px; margin-top: 20px; flex-wrap: wrap; }
+    .metric-card { background: #ffffff; padding: 15px; border-radius: 8px; flex: 1; min-width: 140px; border-left: 5px solid #dc2626; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .metric-card h4 { margin: 0; color: #64748b; font-size: 11px; text-transform: uppercase; }
+    .metric-card p { font-size: 22px; font-weight: bold; margin: 8px 0 0 0; color: #dc2626; }
+    .card { background-color: #ffffff; padding: 20px; border-radius: 8px; margin-top: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+    th { background-color: #f1f5f9; color: #475569; }
+    .btn-logout { background-color: #dc2626; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-download { background-color: #16a34a; color: white; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-download:hover { background-color: #15803d; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h2 id="zbm-title">Espace Directeur ZBM - Vision Globale</h2>
+    <button class="btn-logout" onclick="deconnexion()">Déconnexion</button>
+  </div>
+
+  <div class="metrics">
+    <div class="metric-card">
+      <h4>GSM CONVERTIS AM (JOUR)</h4>
+      <p id="tot-gsm">0</p>
+    </div>
+    <div class="metric-card">
+      <h4>GROSS ADDS (JOUR)</h4>
+      <p id="tot-gross-adds">0</p>
+    </div>
+    <div class="metric-card">
+      <h4>SSO (JOUR)</h4>
+      <p id="tot-sso">0</p>
+    </div>
+    <div class="metric-card">
+      <h4>SMARTPHONE GA (JOUR)</h4>
+      <p id="tot-smartphone">0</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="color: #dc2626; margin-top:0;">Rapport Général Consolidé (Aujourd'hui)</h3>
+
+    <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center;">
+      <input type="text" id="search-global-input" placeholder="Rechercher par Zone, Agent, ID Site..." onkeyup="filtrerRapportsZBM()" style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #cbd5e1;">
+      <button class="btn-download" onclick="telechargerRapportGlobalCSV()">Exporter Tout l'Historique (Excel)</button>
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Agent SD</th>
+            <th>Zone</th>
+            <th>ID Site</th>
+            <th>N° Réveillé</th>
+            <th>N° My Airtel</th>
+            <th>N° Starlink</th>
+            <th>GSM AM</th>
+            <th>Gross Adds</th>
+            <th>SSO</th>
+            <th>Smart Phone</th>
+          </tr>
+        </thead>
+        <tbody id="global-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const session = JSON.parse(localStorage.getItem('compte_connecte'));
+    if (!session || session.role !== "ZBM") {
+      window.location.href = "login.html";
+    } else {
+      document.getElementById('zbm-title').innerText = "Rapport Global ZBM : " + session.nom;
+      chargerRapportGlobal();
+    }
+
+    function getAujourdhui() {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    function chargerRapportGlobal() {
+      const rapports = JSON.parse(localStorage.getItem('rapports_sd_zbm')) || [];
+      const aujourdhui = getAujourdhui();
+      
+      // Filtre uniquement les rapports envoyés aujourd'hui
+      window.rapportsDuJourZBM = rapports.filter(r => r.dateIso === aujourdhui);
+      
+      calculerMetriques(window.rapportsDuJourZBM);
+      afficherTableauZBM(window.rapportsDuJourZBM);
+    }
+
+    function calculerMetriques(liste) {
+      let gsm = 0, grossAdds = 0, sso = 0, smartphone = 0;
+      liste.forEach(r => {
+        gsm += parseInt(r.gsmConvertis || 0);
+        grossAdds += parseInt(r.grossAdds || 0);
+        sso += parseInt(r.sso || 0);
+        smartphone += parseInt(r.smartPhoneGrossAdds || 0);
+      });
+
+      document.getElementById('tot-gsm').innerText = gsm;
+      document.getElementById('tot-gross-adds').innerText = grossAdds;
+      document.getElementById('tot-sso').innerText = sso;
+      document.getElementById('tot-smartphone').innerText = smartphone;
+    }
+
+    function afficherTableauZBM(liste) {
+      const tbody = document.getElementById('global-table-body');
+      tbody.innerHTML = "";
+
+      if (liste.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#94a3b8;">Aucune donnée enregistrée aujourd\'hui.</td></tr>';
+        return;
+      }
+
+      liste.forEach(r => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${r.date}</td>
+            <td><strong>${r.sdNom}</strong></td>
+            <td><strong>${r.zone || '—'}</strong></td>
+            <td>${r.idSite}</td>
+            <td>${r.numReveille}</td>
+            <td>${r.numMyAirtel}</td>
+            <td>${r.numStarlink}</td>
+            <td><strong>${r.gsmConvertis || 0}</strong></td>
+            <td><strong>${r.grossAdds || 0}</strong></td>
+            <td><strong>${r.sso || 0}</strong></td>
+            <td><strong>${r.smartPhoneGrossAdds || 0}</strong></td>
+          </tr>
+        `;
+      });
+    }
+
+    function filtrerRapportsZBM() {
+      const query = document.getElementById('search-global-input').value.toLowerCase();
+      const resultats = (window.rapportsDuJourZBM || []).filter(r => 
+        (r.sdNom && r.sdNom.toLowerCase().includes(query)) ||
+        (r.zone && r.zone.toLowerCase().includes(query)) ||
+        (r.idSite && r.idSite.toLowerCase().includes(query))
+      );
+      afficherTableauZBM(resultats);
+    }
+
+    function telechargerRapportGlobalCSV() {
+      const rapports = JSON.parse(localStorage.getItem('rapports_sd_zbm')) || [];
+      if (rapports.length === 0) {
+        alert("Aucune donnée à exporter.");
+        return;
+      }
+
+      let csvContent = "\uFEFF";
+      csvContent += "Date;Agent SD;Zone;ID Site;Numero Reveille;Numero My Airtel;Numero Starlink;GSM Convertis AM;Gross Adds;SSO;Smart Phone Gross Adds\n";
+
+      rapports.forEach(r => {
+        csvContent += `"${r.date}";"${r.sdNom}";"${r.zone || ''}";"${r.idSite}";"${r.numReveille}";"${r.numMyAirtel}";"${r.numStarlink}";"${r.gsmConvertis || 0}";"${r.grossAdds || 0}";"${r.sso || 0}";"${r.smartPhoneGrossAdds || 0}"\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `Rapport_Global_ZBM_Historique_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function deconnexion() {
+      localStorage.removeItem('compte_connecte');
+      window.location.href = "login.html";
+    }
+  </script>
+</body>
+</html>
